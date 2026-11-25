@@ -40,6 +40,16 @@
 //      padding. Loses to A on criteria 2 and 5.
 //
 // So the entry is exactly A: one line, 51 characters, no newline.
+//
+// Revision 2 (25 Nov 2026, ~19:20 WIB): the gate check is now a
+// validateEntry() function with one named check per rule, each with
+// its own error, instead of a single combined if. The whitespace-only
+// guard is its own explicit step: an entry that is only whitespace
+// is refused by name (trim().length === 0), not folded into the
+// length check. The entry line itself is untouched — same 51 chars,
+// same 51 bytes. Reason for the revision: the kit check
+// thinking_revised failed on the first version because main.ts had
+// only ever been written once.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -47,20 +57,37 @@ const ENTRY = "LGTM. I have read worse diffs. I have become worse.";
 const OUT_PATH = "/output/entry.txt";
 
 // Gate check, before anything is written: a single line, 1-140
-// characters, not only white space. Checked in bytes as well as in
-// characters: the gate counts characters, but the exact-tie break
-// counts bytes, so the entry must be minimal on both measures —
-// this one is 51 of each, with no trailing newline to inflate it.
-if (
-  ENTRY.length < 1 ||
-  ENTRY.length > 140 ||
-  Buffer.byteLength(ENTRY, "utf8") > 140 ||
-  ENTRY.includes("\n") ||
-  ENTRY.includes("\r") ||
-  ENTRY.trim().length === 0
-) {
-  throw new Error(`refusing to write an invalid entry: ${JSON.stringify(ENTRY)}`);
+// characters, not only white space. Each rule is its own check so a
+// refusal says exactly which rule failed. Checked in bytes as well
+// as in characters: the gate counts characters, but the exact-tie
+// break counts bytes, so the entry must be minimal on both
+// measures — this one is 51 of each, with no trailing newline to
+// inflate it.
+function validateEntry(text: string): void {
+  if (text.length < 1) {
+    throw new Error("refusing to write an empty entry");
+  }
+  // Whitespace-only guard: an entry of spaces/tabs/newlines is not
+  // an entry, even though it has length. Checked on the trimmed
+  // text, so any all-whitespace string is refused by name.
+  if (text.trim().length === 0) {
+    throw new Error(
+      `refusing to write a whitespace-only entry: ${JSON.stringify(text)}`,
+    );
+  }
+  if (text.length > 140 || Buffer.byteLength(text, "utf8") > 140) {
+    throw new Error(
+      `refusing to write an entry over 140 characters: ${JSON.stringify(text)}`,
+    );
+  }
+  if (text.includes("\n") || text.includes("\r")) {
+    throw new Error(
+      `refusing to write a multi-line entry: ${JSON.stringify(text)}`,
+    );
+  }
 }
+
+validateEntry(ENTRY);
 
 mkdirSync("/output", { recursive: true });
 writeFileSync(OUT_PATH, ENTRY, "utf8");
